@@ -1,0 +1,53 @@
+package org.pengfei;
+
+import org.joda.time.DateTime;
+import org.apache.hadoop.fs.*;
+import org.apache.commons.io.FileUtils;
+import org.apache.hadoop.conf.Configuration;
+
+import java.io.IOException;
+import java.net.URI;
+import java.util.LinkedList;
+import java.util.List;
+
+public class HdfsMetadataClient {
+
+    private FileSystem fs;
+
+    public HdfsMetadataClient(String nameNodeUri,Configuration hdfsConf) throws IOException {
+        //create a hdfs fs instance
+        FileSystem fs = FileSystem.get(URI.create(nameNodeUri), hdfsConf);
+    }
+
+    public HdfsMetadata getMetadata(FileStatus fs) {
+        String path = fs.getPath().toString();
+        boolean isDirectory = fs.isDirectory();
+        String length = FileUtils.byteCountToDisplaySize(fs.getLen());
+        int replication = fs.getReplication();
+        String blockSize = FileUtils.byteCountToDisplaySize(fs.getBlockSize());
+        String modificationTime = new DateTime(fs.getModificationTime()).toString();
+        String accessTime = new DateTime(fs.getAccessTime()).toString();
+        String owner = fs.getOwner();
+        String group = fs.getGroup();
+        String permission = fs.getPermission().toString();
+        boolean isSymlink = fs.isSymlink();
+        return new HdfsMetadata(path, isDirectory, length, replication, blockSize, modificationTime, accessTime,
+                owner, group, permission, isSymlink);
+    }
+
+    public List<FileStatus> getFileStatus(String filePath, boolean recursive) throws IOException {
+        List<FileStatus> result=new LinkedList<>();
+        Path path = new Path(filePath);
+        if (!recursive) result.add(fs.getFileStatus(path));
+        else {
+            //the second boolean parameter here sets the recursion to true
+            RemoteIterator<LocatedFileStatus> fileStatusListIterator = fs.listFiles(
+                    path, true);
+            while(fileStatusListIterator.hasNext()){
+                LocatedFileStatus fileStatus = fileStatusListIterator.next();
+                result.add(fileStatus);
+            }
+        }
+        return result;
+    }
+}

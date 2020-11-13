@@ -1,0 +1,62 @@
+import org.apache.commons.io.FileUtils
+import org.apache.hadoop.fs.{FileSystem, LocatedFileStatus, Path, RemoteIterator}
+import org.apache.spark.sql.DataFrame
+import org.joda.time.DateTime
+
+// Storing Metadata
+case class FileMetaData(path: String,
+                        isDirectory:Boolean,
+                        length:String,
+                        replication:Int,
+                        blockSize:String,
+                        modificationTime: String,
+                        accessTime:String ,
+                        owner:String ,
+                        group:String ,
+                        permission:String,
+                        isSymlink:Boolean)
+
+object FileMetaData {
+
+  def apply(lfs: LocatedFileStatus):FileMetaData = {
+    new FileMetaData(
+      path= lfs.getPath.toString,
+      isDirectory=lfs.isDirectory,
+      length=FileUtils.byteCountToDisplaySize(lfs.getLen),
+      replication=lfs.getReplication,
+      blockSize=FileUtils.byteCountToDisplaySize(lfs.getBlockSize),
+      modificationTime=new DateTime(lfs.getModificationTime).toString,
+      accessTime=new DateTime(lfs.getAccessTime).toString ,
+      owner=lfs.getOwner ,
+      group=lfs.getGroup ,
+      permission=lfs.getPermission.toString,
+      isSymlink=lfs.isSymlink
+    )
+  }
+}
+
+// Convert RemoteIterator to Scala Iterator.
+implicit def convertToScalaIterator[T](remoteIterator: RemoteIterator[T]): Iterator[T] = {
+  case class wrapper(remoteIterator: RemoteIterator[T]) extends Iterator[T] {
+    override def hasNext: Boolean = remoteIterator.hasNext
+    override def next(): T = remoteIterator.next()
+  }
+  wrapper(remoteIterator)
+}
+
+// Using this we can call metadata method on df - like df.metadata.
+implicit class MetaData(df: DataFrame) {
+  def metadata =  {
+    df.inputFiles.map(new Path(_))
+      .flatMap{
+        FileSystem
+          .get(df.sparkSession.sparkContext.hadoopConfiguration)
+          .listLocatedStatus(_)
+          .toList
+      }
+      .map(FileMetaData(_)).toList.toDF
+  }
+}
+
+val df = spark.read.format("json").load("/HyperThesau/Bibracte/Bdb")
+df.metadata.show(false)
